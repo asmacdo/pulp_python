@@ -47,7 +47,6 @@ class DownloadMetadataStep(publish_step.DownloadStep):
         :type  report: nectar.report.DownloadReport
         """
         report.destination.close()
-
         super(DownloadMetadataStep, self).download_failed(report)
 
     def download_succeeded(self, report):
@@ -62,22 +61,20 @@ class DownloadMetadataStep(publish_step.DownloadStep):
         :param report: The report that details the download
         :type  report: nectar.report.DownloadReport
         """
-        _logger.info(_('Processing metadata retrieved from %(url)s.') % {'url': report.url})
+        _logger.warn(_('Processing metadata retrieved from %(url)s.') % {'url': report.url})
         with contextlib.closing(report.destination) as destination:
             destination.seek(0)
-            self._process_manifest(destination.read())
+            self._process_metadata(destination.read())
 
         super(DownloadMetadataStep, self).download_succeeded(report)
 
     def generate_download_requests(self):
         """
-        For each package name that the user has requested, yield a Nectar DownloadRequest for its
-        metadata file in JSON format.
+        Yield a Nectar DownloadRequest for the metadata of each requested Python distribution.
 
         :return: A generator that yields DownloadRequests for the metadata files.
         :rtype:  generator
         """
-        # We need to retrieve the manifests for each of our packages
         manifest_urls = [urljoin(self.parent._feed_url, 'pypi/%s/json/' % pn)
                          for pn in self.parent._package_names]
         for u in manifest_urls:
@@ -85,29 +82,30 @@ class DownloadMetadataStep(publish_step.DownloadStep):
                 return
             yield request.DownloadRequest(u, StringIO(), {})
 
-    def _process_manifest(self, manifest):
+    def _process_metadata(self, metadata):
         """
+        This method creates Packages from the json metadata provided by the pypi json api.
+
+        https://wiki.python.org/moin/PyPIJSON
+
+
+        ******************OLD***************************************
         This method reads the given package manifest to determine which versions of the package are
         available at the feed repo. It reads the manifest and adds each available unit to the parent
         step's "available_units" attribute.
 
         It also adds each unit's download URL to the parent step's "unit_urls" attribute. Each key
+        ********************************************************************************************
 
-        :param manifest: A package manifest in JSON format, describing the versions of a package
-                         that are available for download.
-        :type  manifest: basestring
+        TODO asmacdo distribution definition
+        :param metadata: Describes all available versions and packages for a python distribution
+        :type  manifest: basestring in JSON format
         """
-        manifest = json.loads(manifest)
-        name = manifest['info']['name']
-        for version, packages in manifest['releases'].items():
+        metadict = json.loads(metadata)
+        for version, packages in metadict['releases'].items():
             for package in packages:
-                if package['packagetype'] == 'sdist' and package['filename'][-4:] != '.zip':
-                    unit = models.Package(name=name, version=version,
-                                          _checksum=package['md5_digest'],
-                                          _checksum_type='md5')
-                    url = package['url']
-                    self.parent.available_units.append(unit)
-                    self.parent.unit_urls[unit] = url
+                unit = models.Package.from_json(package, version, metadict['info'])
+                self.parent.available_units.append(unit)
 
 
 class DownloadPackagesStep(publish_step.DownloadStep):
@@ -136,45 +134,28 @@ class DownloadPackagesStep(publish_step.DownloadStep):
         """
         _logger.info(_('Processing package retrieved from %(url)s.') % {'url': report.url})
 
-        checksum = models.Package.checksum(report.destination, report.data._checksum_type)
-        if checksum != report.data._checksum:
+        checksum = models.Package.checksum(report.destination, "md5")
+        if checksum != report.data.md5_digest:
             report.state = 'failed'
-            report.error_report = {'expected_checksum': report.data._checksum,
+            report.error_report = {'expected_checksum': report.data.md5_digest,
                                    'actual_checksum': checksum}
             return self.download_failed(report)
 
-        package = models.Package.from_archive(report.destination)
-        package.set_storage_path(os.path.basename(report.destination))
-
         try:
-            package.save()
-        except mongoengine.NotUniqueError:
-            package = models.Package.objects.get(name=package.name, version=package.version)
-
-        package.import_content(report.destination)
-        repo_controller.associate_single_unit(self.get_repo().repo_obj, package)
+            report.data.save()
+        # TODO asmacdo switch to dup key?
+        # except mongoengine.NotUniqueError:
+        except Exception, e:
+            import rpdb; rpdb.set_trace()
+        repo_controller.associate_single_unit(self.get_repo().repo_obj, report.data)
         super(DownloadPackagesStep, self).download_succeeded(report)
 
 
 class SyncStep(publish_step.PluginStep):
     """
-    This Step is the top level step in this module. It arranges all the other necessary steps for
-    a Python repository sync.
+    Fake sync step for development.
     """
-
     def __init__(self, repo, conduit, config, working_dir):
-        """
-        Initialize the SyncStep, adding the appropriate child steps.
-
-        :param repo:        metadata describing the repository
-        :type  repo:        pulp.plugins.model.Repository
-        :param conduit:     provides access to relevant Pulp functionality
-        :type  conduit:     pulp.plugins.conduits.repo_sync.RepoSyncConduit
-        :param config:      plugin configuration
-        :type  config:      pulp.plugins.config.PluginCallConfiguration
-        :param working_dir: The working directory path that can be used for temporary storage
-        :type  working_dir: basestring
-        """
         super(SyncStep, self).__init__('sync_step_main', repo, conduit, config, working_dir,
                                        constants.IMPORTER_TYPE_ID)
         self.description = _('Synchronizing %(id)s repository.') % {'id': repo.id}
@@ -183,20 +164,13 @@ class SyncStep(publish_step.PluginStep):
         self._package_names = config.get(constants.CONFIG_KEY_PACKAGE_NAMES, [])
         if self._package_names:
             self._package_names = self._package_names.split(',')
-
-        # these are populated by DownloadMetadataStep
         self.available_units = []
-        self.unit_urls = {}
 
         self.add_child(
             DownloadMetadataStep(
                 'sync_step_download_metadata',
                 repo=repo, config=config, conduit=conduit, working_dir=self.get_working_dir(),
                 description=_('Downloading Python metadata.')))
-
-        self.get_local_units_step = GetLocalUnitsStep(constants.IMPORTER_TYPE_ID,
-                                                      available_units=self.available_units)
-        self.add_child(self.get_local_units_step)
 
         self.add_child(
             DownloadPackagesStep(
@@ -212,10 +186,9 @@ class SyncStep(publish_step.PluginStep):
         :return: A generator that yields DownloadReqests for the Package files.
         :rtype:  generator
         """
-        for p in self.get_local_units_step.units_to_download:
-            url = self.unit_urls.pop(p)
-            destination = os.path.join(self.get_working_dir(), os.path.basename(url))
-            yield request.DownloadRequest(url, destination, p)
+        for p in self.available_units:
+            destination = os.path.join(self.get_working_dir(), os.path.basename(p.url))
+            yield request.DownloadRequest(p.url, destination, p)
 
     def sync(self):
         """
