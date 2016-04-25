@@ -13,7 +13,6 @@ import mongoengine
 from nectar import request
 from pulp.common.plugins import importer_constants
 from pulp.plugins.util import publish_step
-from pulp.plugins.util.publish_step import GetLocalUnitsStep
 from pulp.server.controllers import repository as repo_controller
 
 from pulp_python.common import constants
@@ -61,7 +60,7 @@ class DownloadMetadataStep(publish_step.DownloadStep):
         :param report: The report that details the download
         :type  report: nectar.report.DownloadReport
         """
-        _logger.warn(_('Processing metadata retrieved from %(url)s.') % {'url': report.url})
+        _logger.info(_('Processing metadata retrieved from %(url)s.') % {'url': report.url})
         with contextlib.closing(report.destination) as destination:
             destination.seek(0)
             self._process_metadata(destination.read())
@@ -70,7 +69,7 @@ class DownloadMetadataStep(publish_step.DownloadStep):
 
     def generate_download_requests(self):
         """
-        Yield a Nectar DownloadRequest for the metadata of each requested Python distribution.
+        Yield a Nectar DownloadRequest for the json metadata of each requested Python distribution.
 
         :return: A generator that yields DownloadRequests for the metadata files.
         :rtype:  generator
@@ -88,16 +87,6 @@ class DownloadMetadataStep(publish_step.DownloadStep):
 
         https://wiki.python.org/moin/PyPIJSON
 
-
-        ******************OLD***************************************
-        This method reads the given package manifest to determine which versions of the package are
-        available at the feed repo. It reads the manifest and adds each available unit to the parent
-        step's "available_units" attribute.
-
-        It also adds each unit's download URL to the parent step's "unit_urls" attribute. Each key
-        ********************************************************************************************
-
-        TODO asmacdo distribution definition
         :param metadata: Describes all available versions and packages for a python distribution
         :type  manifest: basestring in JSON format
         """
@@ -116,30 +105,26 @@ class DownloadPackagesStep(publish_step.DownloadStep):
 
     def download_succeeded(self, report):
         """
-        This method processes a downloaded Python package. It opens the package and reads its
-        PKG-INFO metadata file to determine all of its metadata. This step can be slow for larger
-        packages since it needs to decompress them to do this. Despite it being slower to do this
-        than it would be to read the metadata from the metadata file we downloaded earlier, we do
-        not get the metadata for older versions from that file. Thus, this is the only reliable way
-        to represent the metadata for different versions of a package. It also has the benefit of
-        code reuse for determining the metadata, as the upload code also acquires the metadata this
-        way.
+        This method saves and associates a Package after it has been successfully downloaded.
 
         This method also ensures that the checksum of the downloaded package matches the checksum
-        that was listed in the manifest. If everything checks out, the package is added to the
+        that was listed in the metadata. If everything checks out, the package is added to the
         repository and moved to the proper storage path.
 
         :param report: The report that details the download
         :type  report: nectar.report.DownloadReport
         """
+        package = report.data
         _logger.info(_('Processing package retrieved from %(url)s.') % {'url': report.url})
 
         checksum = models.Package.checksum(report.destination, "md5")
-        if checksum != report.data.md5_digest:
+        if checksum != package.md5_digest:
             report.state = 'failed'
-            report.error_report = {'expected_checksum': report.data.md5_digest,
+            report.error_report = {'expected_checksum': package.md5_digest,
                                    'actual_checksum': checksum}
             return self.download_failed(report)
+
+        package.set_storage_path(os.path.basename(report.destination))
 
         try:
             report.data.save()
@@ -147,6 +132,8 @@ class DownloadPackagesStep(publish_step.DownloadStep):
         # except mongoengine.NotUniqueError:
         except Exception, e:
             import rpdb; rpdb.set_trace()
+
+        package.import_content(report.destination)
         repo_controller.associate_single_unit(self.get_repo().repo_obj, report.data)
         super(DownloadPackagesStep, self).download_succeeded(report)
 
