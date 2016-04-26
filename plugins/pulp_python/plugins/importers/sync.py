@@ -46,6 +46,7 @@ class DownloadMetadataStep(publish_step.DownloadStep):
         :type  report: nectar.report.DownloadReport
         """
         report.destination.close()
+
         super(DownloadMetadataStep, self).download_failed(report)
 
     def download_succeeded(self, report):
@@ -124,17 +125,19 @@ class DownloadPackagesStep(publish_step.DownloadStep):
                                    'actual_checksum': checksum}
             return self.download_failed(report)
 
+        package._checksum = checksum
+        package.update_from_file(report.destination)
         package.set_storage_path(os.path.basename(report.destination))
-
+        # https://pypi.python.org/packages/4a/d5/4ef01e811dd6d166fdbef558a52725828f6b6ba253edac445d836ab88b1e/scipy-0.10.1.zip
         try:
-            report.data.save()
-        # TODO asmacdo switch to dup key?
-        # except mongoengine.NotUniqueError:
+            package.save()
         except Exception, e:
             import rpdb; rpdb.set_trace()
+        # TODO asmacdo switch to dup key?
+        # except mongoengine.NotUniqueError:
 
         package.import_content(report.destination)
-        repo_controller.associate_single_unit(self.get_repo().repo_obj, report.data)
+        repo_controller.associate_single_unit(self.get_repo().repo_obj, package)
         super(DownloadPackagesStep, self).download_succeeded(report)
 
 
