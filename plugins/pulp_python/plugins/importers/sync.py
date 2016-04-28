@@ -125,10 +125,8 @@ class DownloadPackagesStep(publish_step.DownloadStep):
                                    'actual_checksum': checksum}
             return self.download_failed(report)
 
-        package._checksum = checksum
         package.update_from_file(report.destination)
         package.set_storage_path(os.path.basename(report.destination))
-        # https://pypi.python.org/packages/4a/d5/4ef01e811dd6d166fdbef558a52725828f6b6ba253edac445d836ab88b1e/scipy-0.10.1.zip
         try:
             package.save()
         except Exception, e:

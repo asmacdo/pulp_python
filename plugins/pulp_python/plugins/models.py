@@ -106,6 +106,7 @@ class Package(FileContentUnit):
         meta_dict = package.PackageFile.from_filename(path, comment='').metadata_dictionary()
         for key, value in meta_dict.iteritems():
             setattr(self, key, value)
+        self._checksum = self.checksum(path)
 
     @staticmethod
     def checksum(path, algorithm=DEFAULT_CHECKSUM_TYPE):
