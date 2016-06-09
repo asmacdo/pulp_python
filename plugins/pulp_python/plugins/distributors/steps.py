@@ -39,7 +39,7 @@ class PublishContentStep(PluginStep):
         for name, packages in _get_projects(self.get_conduit().repo_id).items():
             for package in packages:
                 relative_path = _get_package_path(name, package['filename'])
-                symlink_path = os.path.join(self.parent.web_working_dir, relative_path)
+                symlink_path = os.path.join(self.parent.web_working_dir, 'packages', relative_path)
                 if not os.path.exists(os.path.dirname(symlink_path)):
                     os.makedirs(os.path.dirname(symlink_path))
                 os.symlink(package['storage_path'], symlink_path)
@@ -125,8 +125,8 @@ class PublishMetadataStep(PluginStep):
             heading = ElementTree.SubElement(body, 'h1')
             heading.text = title.text
             for package in packages:
-                href = '../../%s#%s=%s' % (_get_package_path(name, package['filename']),
-                                           package['checksum_type'], package['checksum'])
+                href = '../../packages/%s#%s=%s' % (_get_package_path(name, package['filename']),
+                                                    package['checksum_type'], package['checksum'])
                 node = ElementTree.SubElement(body, 'a', {'href': href, 'rel': 'internal'})
                 node.text = package['filename']
                 ElementTree.SubElement(body, 'br')
@@ -164,18 +164,18 @@ class PublishMetadataStep(PluginStep):
             version = package['version']
             parsed_version = pkg_resources.parse_version(version)
             if parsed_version > latest_version:
-                info['author'] = package['author'],
-                info['summary'] = package['summary'],
+                info['author'] = package['author']
+                info['summary'] = package['summary']
                 latest_version = parsed_version
 
-            href = '../../../%s#%s=%s' % (_get_package_path(name, package['filename']),
-                                          package['checksum_type'], package['checksum'])
+            href = '%s#%s=%s' % (_get_package_path(name, package['filename']),
+                                 package['checksum_type'], package['checksum'])
 
             # package data is specific to an individual file
             package_data = {
                 'filename': package['filename'],
                 'packagetype': package['packagetype'],
-                'url': href,
+                'path': href,
                 'md5_digest': package['md5_digest'],
             }
             releases[version].append(package_data)
@@ -229,7 +229,7 @@ def _get_package_path(name, filename):
                      should be placed.
     :rtype:          basestring
     """
-    return os.path.join('packages', 'source', name[0], name, filename)
+    return os.path.join('source', name[0], name, filename)
 
 
 def _get_projects(repo_id):
@@ -254,7 +254,7 @@ def _get_projects(repo_id):
         packages.setdefault(pac.name, []).append({
             'filename': pac.filename,
             'name': pac.name,
-            'url': pac.url,
+            'path': pac.path,
             'packagetype': pac.packagetype,
             'md5_digest': pac.md5_digest,
             'checksum_type': pac._checksum_type,

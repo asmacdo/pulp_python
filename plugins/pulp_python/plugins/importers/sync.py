@@ -191,9 +191,9 @@ class SyncStep(publish_step.PluginStep):
                 description=_('Downloading Python metadata.')))
 
         # Populate a list of `self.get_local_units_step.units_to_download`.
-        self.get_local_units_step = GetLocalUnitsStep(constants.IMPORTER_TYPE_ID,
-                                                      available_units=self.available_units)
-        self.add_child(self.get_local_units_step)
+        # self.get_local_units_step = GetLocalUnitsStep(constants.IMPORTER_TYPE_ID,
+                                                      # available_units=self.available_units)
+        # self.add_child(self.get_local_units_step)
 
         # Download each package in the units to download list.
         self.add_child(
@@ -209,9 +209,11 @@ class SyncStep(publish_step.PluginStep):
         :return: A generator that yields DownloadReqests for the Package files.
         :rtype:  generator
         """
-        for package in self.get_local_units_step.units_to_download:
-            destination = os.path.join(self.get_working_dir(), os.path.basename(package.url))
-            yield request.DownloadRequest(package.url, destination, package)
+        for package in self.available_units:
+        # for package in self.get_local_units_step.units_to_download:
+            url = os.path.join(self._feed_url, 'packages', package.path)
+            destination = os.path.join(self.get_working_dir(), os.path.basename(url))
+            yield request.DownloadRequest(url, destination, package)
 
     def sync(self):
         """

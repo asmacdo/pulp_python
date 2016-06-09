@@ -67,6 +67,7 @@ class Package(FileContentUnit):
     packagetype = StringField()
     summary = StringField()
     url = StringField()
+    path = StringField()
     version = StringField(required=True)
 
     _checksum = StringField()
@@ -101,7 +102,8 @@ class Package(FileContentUnit):
         """
         package_attrs = {}
         package_attrs['filename'] = package_data['filename']
-        package_attrs['url'] = package_data['url']
+        package_attrs['path'] = package_data['path']
+        package_attrs['url'] = package_data.get('url')
         package_attrs['name'] = project_data['name']
         package_attrs['packagetype'] = package_data['packagetype']
         package_attrs['md5_digest'] = package_data['md5_digest']
