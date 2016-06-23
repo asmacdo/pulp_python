@@ -98,7 +98,6 @@ class TestPublishContentStep(unittest.TestCase):
         exists.side_effect = mock_exists
 
         step = steps.PublishContentStep()
-
         mock_package_qs.packages_in_repo.return_value = _PACKAGES
         conduit = mock.MagicMock()
         step.get_conduit = mock.MagicMock(return_value=conduit)

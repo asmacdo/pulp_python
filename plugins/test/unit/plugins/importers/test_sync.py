@@ -781,7 +781,6 @@ class TestSyncStep(unittest.TestCase):
         repo = mock.MagicMock()
         conduit = mock.MagicMock()
         config = mock.MagicMock()
-        # mock the feed url
         working_dir = '/some/dir'
         config.get.return_value = 'mock/feed'
 
