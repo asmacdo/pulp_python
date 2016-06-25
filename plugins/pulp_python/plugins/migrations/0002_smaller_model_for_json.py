@@ -11,7 +11,15 @@ def migrate(*args, **kwargs):
     """
     db = connection.get_database()
     collection = db['units_python_package']
+    set_packagetype(collection)
+    update_fields(collection)
+    collection.drop_indexes()
 
+
+def update_fields(collection):
+    """
+    Updates field names and removes unecessary fields.
+    """
     collection.update({}, {"$unset": {"home_page": True}}, multi=True)
     collection.update({}, {"$unset": {"platform": True}}, multi=True)
     collection.update({}, {"$unset": {"license": True}}, multi=True)
@@ -20,3 +28,19 @@ def migrate(*args, **kwargs):
     collection.update({}, {"$unset": {"author_email": True}}, multi=True)
 
     collection.update({}, {"$rename": {"_filename": "filename"}}, multi=True)
+
+
+def set_packagetype(collection):
+    """
+    This sets the new `packagetype` field. This migration should only operate on sdists
+    because they were the only supported type before this migration.
+    """
+    tarball = {"filename": {"$regex": "tar.gz$"}}
+    bzip = {"filename": {"$regex": "tar.bz2$"}}
+    zipfile = {"filename": {"$regex": "zip$"}}
+
+    sdist_filetype = {"$or": [tarball, bzip, zipfile]}
+    no_packagetype = {"packagetype": {"$exists": 0}}
+    set_sdist = {"$set": {"packagetype": "sdist"}}
+
+    collection.update({"$and": [sdist_filetype, no_packagetype]}, set_sdist, multi=True)
