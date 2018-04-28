@@ -20,6 +20,18 @@ class ClassifierSerializer(serializers.ModelSerializer):
         fields = ('name',)
 
 
+class ShortS(platform.ContentSerializer):
+    filename = serializers.CharField(
+        help_text=_('The name of the distribution package, usually of the format:'
+                    ' {distribution}-{version}(-{build tag})?-{python tag}-{abi tag}'
+                    '-{platform tag}.{packagetype}')
+    )
+
+    class Meta:
+        fields = ('filename',)
+        model = python_models.PythonPackageContent
+
+
 class PythonPackageContentSerializer(platform.ContentSerializer):
     """
     A Serializer for PythonPackageContent.

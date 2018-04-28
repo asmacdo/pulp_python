@@ -15,7 +15,13 @@ class PythonPackageContentViewSet(platform.ContentViewSet):
 
     endpoint_name = 'python/packages'
     queryset = python_models.PythonPackageContent.objects.all()
-    serializer_class = python_serializers.PythonPackageContentSerializer
+    # serializer_class = python_serializers.PythonPackageContentSerializer
+    # serializer_class = None
+
+    serializers = {
+        'list': python_serializers.ShortS,
+        'default': python_serializers.PythonPackageContentSerializer
+    }
 
 
 class PythonRemoteViewSet(platform.RemoteViewSet):
